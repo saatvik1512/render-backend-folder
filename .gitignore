@@ -1,1 +1,20 @@
-newenv
+newenv/
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore environment files
+.env
+
+# Ignore dependency binaries
+*.whl
+
+# Ignore logs and temporary files
+temp/
+*.log
+
+# Ignore model weights and large files (optional)
+yolov8n.pt
