@@ -15,6 +15,3 @@ __pycache__/
 # Ignore logs and temporary files
 temp/
 *.log
-
-# Ignore model weights and large files (optional)
-yolov8n.pt
