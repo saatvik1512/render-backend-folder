@@ -8,6 +8,9 @@ from flask_cors import CORS
 import pyttsx3
 from ultralytics import YOLO
 from google.generativeai import GenerativeModel, configure
+from flask_limiter import Limiter
+
+limiter = Limiter(key_func=lambda: request.remote_addr)
 
 configure(api_key=os.getenv('GOOGLE_API_KEY'))  # Set in .env
 gemini = GenerativeModel('gemini-pro')
@@ -57,6 +60,7 @@ def recognize_face(image_path):
     return None
 
 @app.route('/get-object-info', methods=['POST'])
+@limiter.limit("10/minute")
 def get_object_info():
     data = request.json
     if not data.get('object'):
@@ -73,52 +77,93 @@ def get_object_info():
 
 
 
+# @app.route('/detect-objects', methods=['POST'])
+# def detect_objects():
+#     if 'file' not in request.files:
+#         print("No file uploaded")
+#         return jsonify({"error": "No file uploaded"}), 400
+
+#     file = request.files['file']
+#     temp_path = os.path.join(TEMP_DIR, f"obj_{uuid.uuid4()}.jpg")
+    
+#     try:
+#         # Save and process image
+#         file.save(temp_path)
+#         img = cv2.imread(temp_path)
+        
+#         # YOLO object detection
+#         results = model(img)
+#         boxes = results[0].boxes.xyxy.tolist()
+#         classes = results[0].boxes.cls.tolist()
+#         names = results[0].names
+        
+#         # Dimension calculation using reference object (A4 paper)
+#         ref_width_cm = 21.0  # A4 paper width
+#         ref_objects = [i for i, cls in enumerate(classes) if names[int(cls)] == 'book']
+#         if not ref_objects:
+#             print("Place a reference object (book) in frame")
+#             return jsonify({"error": "Place a reference object (book) in frame"}), 400
+            
+#         ref_box = boxes[ref_objects[0]]
+#         ref_width_px = ref_box[2] - ref_box[0]
+#         px_per_cm = ref_width_px / ref_width_cm
+        
+#         # Process detections
+#         detections = []
+#         for box, cls in zip(boxes, classes):
+#             label = names[int(cls)]
+#             x1, y1, x2, y2 = box
+#             width = round((x2 - x1) / px_per_cm, 1)
+#             height = round((y2 - y1) / px_per_cm, 1)
+            
+#             detections.append({
+#                 "label": label,
+#                 "width": width,
+#                 "height": height,
+#                 "bbox": [x1, y1, x2, y2]
+#             })
+#         return jsonify({"results": detections})
+        
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+#     finally:
+#         if os.path.exists(temp_path):
+#             os.remove(temp_path)
+
 @app.route('/detect-objects', methods=['POST'])
 def detect_objects():
     if 'file' not in request.files:
-        print("No file uploaded")
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files['file']
     temp_path = os.path.join(TEMP_DIR, f"obj_{uuid.uuid4()}.jpg")
     
     try:
-        # Save and process image
         file.save(temp_path)
         img = cv2.imread(temp_path)
-        
-        # YOLO object detection
+        if img is None:
+            return jsonify({"error": "Invalid image file"}), 400
+
         results = model(img)
         boxes = results[0].boxes.xyxy.tolist()
         classes = results[0].boxes.cls.tolist()
         names = results[0].names
-        
-        # Dimension calculation using reference object (A4 paper)
-        ref_width_cm = 21.0  # A4 paper width
-        ref_objects = [i for i, cls in enumerate(classes) if names[int(cls)] == 'book']
-        if not ref_objects:
-            print("Place a reference object (book) in frame")
-            return jsonify({"error": "Place a reference object (book) in frame"}), 400
-            
-        ref_box = boxes[ref_objects[0]]
-        ref_width_px = ref_box[2] - ref_box[0]
-        px_per_cm = ref_width_px / ref_width_cm
-        
-        # Process detections
+
+        # Remove reference object requirement
         detections = []
         for box, cls in zip(boxes, classes):
             label = names[int(cls)]
             x1, y1, x2, y2 = box
-            width = round((x2 - x1) / px_per_cm, 1)
-            height = round((y2 - y1) / px_per_cm, 1)
+            width = x2 - x1  # Return pixel dimensions instead
+            height = y2 - y1
             
             detections.append({
                 "label": label,
-                "width": width,
-                "height": height,
+                "width": round(width, 1),
+                "height": round(height, 1),
                 "bbox": [x1, y1, x2, y2]
             })
-        
+            
         return jsonify({"results": detections})
         
     except Exception as e:
